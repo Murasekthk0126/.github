@@ -1,0 +1,57 @@
+name: Auto-copy CLAUDE.md to new repositories
+# 新しいリポジトリが Organization 内に作成されたとき CLAUDE.md を自動コピー
+on:
+  repository_dispatch:
+    types: [repo-created]
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'コピー先リポジトリ名 (例: my-new-repo)'
+        required: true
+
+jobs:
+  copy-claude-md:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout .github repository
+        uses: actions/checkout@v4
+
+      - name: Copy CLAUDE.md to target repository
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ORG: Murasekthk0126
+          TARGET_REPO: ${{ github.event.inputs.target_repo || github.event.client_payload.repo_name }}
+        run: |
+          if [ -z "$TARGET_REPO" ]; then
+            echo "エラー: コピー先リポジトリが指定されていません"
+            exit 1
+          fi
+
+          echo "=== $ORG/$TARGET_REPO に CLAUDE.md をコピー中 ==="
+
+          # コピー先リポジトリの存在確認
+          gh api /repos/$ORG/$TARGET_REPO --jq '.full_name' || {
+            echo "エラー: リポジトリ $ORG/$TARGET_REPO が見つかりません"
+            exit 1
+          }
+
+          # 既存ファイルのSHAを取得（更新時に必要）
+          EXISTING_SHA=$(gh api /repos/$ORG/$TARGET_REPO/contents/CLAUDE.md \
+            --jq '.sha' 2>/dev/null || echo "")
+
+          ENCODED=$(base64 -w 0 CLAUDE.md)
+
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api /repos/$ORG/$TARGET_REPO/contents/CLAUDE.md \
+              --method PUT \
+              --field message="chore: sync CLAUDE.md from .github repository" \
+              --field content="$ENCODED" \
+              --field sha="$EXISTING_SHA"
+            echo "✓ CLAUDE.md を更新しました"
+          else
+            gh api /repos/$ORG/$TARGET_REPO/contents/CLAUDE.md \
+              --method PUT \
+              --field message="chore: add CLAUDE.md from .github repository" \
+              --field content="$ENCODED"
+            echo "✓ CLAUDE.md を作成しました"
+          fi
