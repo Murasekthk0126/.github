@@ -1,5 +1,5 @@
 name: Copy shared files to new repositories
-# 新リポジトリ作成時に CLAUDE.md / .claude/agents/ / .claude/commands/ / .claude/skills/ を自動コピーする
+# 新リポジトリ作成時に CLAUDE.md / .claude/ 配下を自動コピーする
 # workflow_dispatch（手動）または repository_dispatch（外部トリガー）に対応
 on:
   repository_dispatch:
@@ -80,6 +80,10 @@ jobs:
           # CLAUDE.md
           echo "--- CLAUDE.md ---"
           copy_file "CLAUDE.md" "CLAUDE.md"
+
+          # .claude/settings.json
+          echo "--- .claude/settings.json ---"
+          copy_file ".claude/settings.json" ".claude/settings.json"
 
           # .claude/agents/
           echo "--- .claude/agents/ ---"
