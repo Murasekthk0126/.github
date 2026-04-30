@@ -1,5 +1,6 @@
-name: Auto-copy CLAUDE.md to new repositories
-# 新しいリポジトリが Organization 内に作成されたとき CLAUDE.md を自動コピー
+name: Copy shared files to new repositories
+# 新リポジトリ作成時に CLAUDE.md と .claude/agents/ を自動コピーする
+# 手動実行（workflow_dispatch）または外部トリガー（repository_dispatch）に対応
 on:
   repository_dispatch:
     types: [repo-created]
@@ -10,13 +11,13 @@ on:
         required: true
 
 jobs:
-  copy-claude-md:
+  copy-shared-files:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout .github repository
         uses: actions/checkout@v4
 
-      - name: Copy CLAUDE.md to target repository
+      - name: Copy CLAUDE.md and .claude/agents/ to target repository
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           ORG: Murasekthk0126
@@ -27,31 +28,62 @@ jobs:
             exit 1
           fi
 
-          echo "=== $ORG/$TARGET_REPO に CLAUDE.md をコピー中 ==="
+          echo "=== コピー先: $ORG/$TARGET_REPO ==="
 
           # コピー先リポジトリの存在確認
-          gh api /repos/$ORG/$TARGET_REPO --jq '.full_name' || {
+          gh api /repos/$ORG/$TARGET_REPO --jq '.full_name' 2>/dev/null || {
             echo "エラー: リポジトリ $ORG/$TARGET_REPO が見つかりません"
             exit 1
           }
 
-          # 既存ファイルのSHAを取得（更新時に必要）
-          EXISTING_SHA=$(gh api /repos/$ORG/$TARGET_REPO/contents/CLAUDE.md \
-            --jq '.sha' 2>/dev/null || echo "")
+          # ファイルを1つコピーする関数
+          copy_file() {
+            local SRC="$1"      # ローカルパス（checkout済み）
+            local DEST="$2"     # コピー先リポジトリ内のパス
 
-          ENCODED=$(base64 -w 0 CLAUDE.md)
+            if [ ! -f "$SRC" ]; then
+              echo "  スキップ: $SRC が見つかりません"
+              return
+            fi
 
-          if [ -n "$EXISTING_SHA" ]; then
-            gh api /repos/$ORG/$TARGET_REPO/contents/CLAUDE.md \
-              --method PUT \
-              --field message="chore: sync CLAUDE.md from .github repository" \
-              --field content="$ENCODED" \
-              --field sha="$EXISTING_SHA"
-            echo "✓ CLAUDE.md を更新しました"
+            local ENCODED
+            ENCODED=$(base64 -w 0 "$SRC")
+
+            local EXISTING_SHA
+            EXISTING_SHA=$(gh api /repos/$ORG/$TARGET_REPO/contents/$DEST \
+              --jq '.sha' 2>/dev/null || echo "")
+
+            if [ -n "$EXISTING_SHA" ]; then
+              gh api /repos/$ORG/$TARGET_REPO/contents/$DEST \
+                --method PUT \
+                --field message="chore: sync $DEST from .github repository" \
+                --field content="$ENCODED" \
+                --field sha="$EXISTING_SHA" \
+                --silent \
+                && echo "  ✓ 更新: $DEST" || echo "  ✗ 失敗: $DEST"
+            else
+              gh api /repos/$ORG/$TARGET_REPO/contents/$DEST \
+                --method PUT \
+                --field message="chore: add $DEST from .github repository" \
+                --field content="$ENCODED" \
+                --silent \
+                && echo "  ✓ 作成: $DEST" || echo "  ✗ 失敗: $DEST"
+            fi
+          }
+
+          # CLAUDE.md をコピー
+          echo "--- CLAUDE.md ---"
+          copy_file "CLAUDE.md" "CLAUDE.md"
+
+          # .claude/agents/ 配下のエージェントファイルをすべてコピー
+          echo "--- .claude/agents/ ---"
+          if [ -d ".claude/agents" ]; then
+            for AGENT_FILE in .claude/agents/*.md; do
+              FILENAME=$(basename "$AGENT_FILE")
+              copy_file "$AGENT_FILE" ".claude/agents/$FILENAME"
+            done
           else
-            gh api /repos/$ORG/$TARGET_REPO/contents/CLAUDE.md \
-              --method PUT \
-              --field message="chore: add CLAUDE.md from .github repository" \
-              --field content="$ENCODED"
-            echo "✓ CLAUDE.md を作成しました"
+            echo "  スキップ: .claude/agents/ ディレクトリが見つかりません"
           fi
+
+          echo "=== コピー完了 ==="
