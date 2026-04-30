@@ -1,5 +1,5 @@
 name: Copy shared files to new repositories
-# 新リポジトリ作成時に CLAUDE.md / .claude/agents/ / .claude/commands/ を自動コピーする
+# 新リポジトリ作成時に CLAUDE.md / .claude/agents/ / .claude/commands/ / .claude/skills/ を自動コピーする
 # workflow_dispatch（手動）または repository_dispatch（外部トリガー）に対応
 on:
   repository_dispatch:
@@ -67,24 +67,30 @@ jobs:
             fi
           }
 
+          # ディレクトリ内の全 .md を再帰的にコピーする関数
+          copy_dir() {
+            local DIR="$1"
+            if [ -d "$DIR" ]; then
+              find "$DIR" -name "*.md" | while read -r FILE; do
+                copy_file "$FILE" "$FILE"
+              done
+            fi
+          }
+
           # CLAUDE.md
           echo "--- CLAUDE.md ---"
           copy_file "CLAUDE.md" "CLAUDE.md"
 
           # .claude/agents/
           echo "--- .claude/agents/ ---"
-          if [ -d ".claude/agents" ]; then
-            for FILE in .claude/agents/*.md; do
-              copy_file "$FILE" "$FILE"
-            done
-          fi
+          copy_dir ".claude/agents"
 
           # .claude/commands/
           echo "--- .claude/commands/ ---"
-          if [ -d ".claude/commands" ]; then
-            for FILE in .claude/commands/*.md; do
-              copy_file "$FILE" "$FILE"
-            done
-          fi
+          copy_dir ".claude/commands"
+
+          # .claude/skills/
+          echo "--- .claude/skills/ ---"
+          copy_dir ".claude/skills"
 
           echo "=== コピー完了 ==="
