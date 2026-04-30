@@ -1,6 +1,6 @@
 name: Copy shared files to new repositories
-# 新リポジトリ作成時に CLAUDE.md と .claude/agents/ を自動コピーする
-# 手動実行（workflow_dispatch）または外部トリガー（repository_dispatch）に対応
+# 新リポジトリ作成時に CLAUDE.md / .claude/agents/ / .claude/commands/ を自動コピーする
+# workflow_dispatch（手動）または repository_dispatch（外部トリガー）に対応
 on:
   repository_dispatch:
     types: [repo-created]
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout .github repository
         uses: actions/checkout@v4
 
-      - name: Copy CLAUDE.md and .claude/agents/ to target repository
+      - name: Copy shared files to target repository
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           ORG: Murasekthk0126
@@ -30,7 +30,6 @@ jobs:
 
           echo "=== コピー先: $ORG/$TARGET_REPO ==="
 
-          # コピー先リポジトリの存在確認
           gh api /repos/$ORG/$TARGET_REPO --jq '.full_name' 2>/dev/null || {
             echo "エラー: リポジトリ $ORG/$TARGET_REPO が見つかりません"
             exit 1
@@ -38,13 +37,10 @@ jobs:
 
           # ファイルを1つコピーする関数
           copy_file() {
-            local SRC="$1"      # ローカルパス（checkout済み）
-            local DEST="$2"     # コピー先リポジトリ内のパス
+            local SRC="$1"
+            local DEST="$2"
 
-            if [ ! -f "$SRC" ]; then
-              echo "  スキップ: $SRC が見つかりません"
-              return
-            fi
+            [ -f "$SRC" ] || { echo "  スキップ: $SRC"; return; }
 
             local ENCODED
             ENCODED=$(base64 -w 0 "$SRC")
@@ -71,19 +67,24 @@ jobs:
             fi
           }
 
-          # CLAUDE.md をコピー
+          # CLAUDE.md
           echo "--- CLAUDE.md ---"
           copy_file "CLAUDE.md" "CLAUDE.md"
 
-          # .claude/agents/ 配下のエージェントファイルをすべてコピー
+          # .claude/agents/
           echo "--- .claude/agents/ ---"
           if [ -d ".claude/agents" ]; then
-            for AGENT_FILE in .claude/agents/*.md; do
-              FILENAME=$(basename "$AGENT_FILE")
-              copy_file "$AGENT_FILE" ".claude/agents/$FILENAME"
+            for FILE in .claude/agents/*.md; do
+              copy_file "$FILE" "$FILE"
             done
-          else
-            echo "  スキップ: .claude/agents/ ディレクトリが見つかりません"
+          fi
+
+          # .claude/commands/
+          echo "--- .claude/commands/ ---"
+          if [ -d ".claude/commands" ]; then
+            for FILE in .claude/commands/*.md; do
+              copy_file "$FILE" "$FILE"
+            done
           fi
 
           echo "=== コピー完了 ==="
