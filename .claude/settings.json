@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh label list *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh issue create *)",
+      "Bash(gh search issues *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"\nconst input = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}');\nconst path = input.file_path || input.path || '';\nif (/production/i.test(path) || path.endsWith('.sql')) {\n  console.error('BLOCKED: production パスまたは .sql ファイルへの書き込みはブロックされています: ' + path);\n  process.exit(2);\n}\n\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"\nconst input = JSON.parse(process.env.CLAUDE_TOOL_INPUT || '{}');\nconst path = input.file_path || input.path || '';\nif (path.endsWith('.ts') || path.endsWith('.tsx')) {\n  const { execSync } = require('child_process');\n  try {\n    execSync('npx prettier --write ' + JSON.stringify(path), { stdio: 'inherit' });\n  } catch(e) {\n    // prettier が未インストールの場合は静かに無視\n  }\n}\n\""
+          }
+        ]
+      }
+    ]
+  }
+}
